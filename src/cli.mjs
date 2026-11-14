@@ -1,7 +1,7 @@
 // Command line interface for Stashpad. Returns an exit code; never calls process.exit itself.
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { isValidDay, parseMemory } from "./memory-format.mjs";
+import { KINDS, TRUST_BY_SOURCE, isValidDay, parseMemory } from "./memory-format.mjs";
 import { DATA_LABEL, defuse, defuseValues, fence, findInstructionLikeText } from "./security.mjs";
 import { serveMcp } from "./mcp.mjs";
 import { runEval } from "./eval.mjs";
@@ -51,7 +51,7 @@ import {
 } from "./store.mjs";
 
 import { cancelHandoff, claimHandoff, createHandoff, listHandoffs } from "./handoff.mjs";
-import { giveFeedback, lint } from "./feedback.mjs";
+import { SIGNALS, giveFeedback, lint } from "./feedback.mjs";
 import { lastGiven } from "./sessions.mjs";
 import { decisionBody, decisionId } from "./decisions.mjs";
 import { hooksPaused, setHooksPaused } from "./hookswitch.mjs";
@@ -483,6 +483,16 @@ function cmdHistory(io, dir, id, values) {
 
 const csv = (value) => (value === undefined ? null : value.split(",").map((v) => v.trim()).filter(Boolean));
 
+function checkFilterValues(io, values) {
+  const kinds = csv(values.kind);
+  const badKind = kinds?.find((kind) => !KINDS.includes(kind));
+  if (badKind) return usageError(io, `unknown kind "${badKind}". Use one of: ${KINDS.join(", ")}.`);
+  const sourceTypes = csv(values["source-type"]);
+  const badSourceType = sourceTypes?.find((type) => !(type in TRUST_BY_SOURCE));
+  if (badSourceType) return usageError(io, `unknown source type "${badSourceType}". Use one of: ${Object.keys(TRUST_BY_SOURCE).join(", ")}.`);
+  return null;
+}
+
 function filtersFrom(values) {
   return {
     includeEnded: values.all === true,
@@ -495,6 +505,8 @@ function filtersFrom(values) {
 }
 
 function cmdList(io, dir, values) {
+  const badFilter = checkFilterValues(io, values);
+  if (badFilter !== null) return badFilter;
   const { rows, skipped } = listMemories(dir, filtersFrom(values));
 
   for (const item of skipped) {
@@ -525,6 +537,8 @@ function cmdSearch(io, dir, query, values) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
     return usageError(io, "--limit must be a whole number from 1 to 100");
   }
+  const badFilter = checkFilterValues(io, values);
+  if (badFilter !== null) return badFilter;
 
   const { total, results, skipped } = searchMemories(dir, text, {
     ...filtersFrom(values),
@@ -699,6 +713,9 @@ async function cmdHandoff(io, dir, [action, id], values) {
     if (values.text === undefined) return usageError(io, 'handoff leave needs --text, for example: stashpad handoff leave --text "Parser half done; next: tests."');
     const text = values.text === "-" ? await io.readStdin() : values.text;
     const days = values["expires-days"] === undefined ? undefined : Number(values["expires-days"]);
+    if (days !== undefined && (!Number.isInteger(days) || days < 1 || days > 90)) {
+      return usageError(io, "expires-days must be a whole number from 1 to 90.");
+    }
     const r = createHandoff(dir, { text, origin: values.auto ? "auto" : "manual", from: values.from ?? null, branch: values.branch ?? null, ...(days === undefined ? {} : { expiresDays: days }) });
     if (values.json) io.stdout(JSON.stringify(r));
     else io.stdout(`Left handoff ${r.id} (${r.origin}, expires ${r.expires_at.slice(0, 10)}). The next session takes it with: stashpad handoff claim${r.replaced.length ? `\nIt replaces ${r.replaced.join(", ")}.` : ""}`);
@@ -754,6 +771,7 @@ function cmdFeedbackLast(io, dir, values) {
 
 function cmdFeedback(io, dir, id, values) {
   if (values.signal === undefined) return usageError(io, "feedback needs --signal helpful, stale or wrong.");
+  if (!SIGNALS.includes(values.signal)) return usageError(io, `signal must be one of ${SIGNALS.join(", ")}.`);
   const r = giveFeedback(dir, id, { signal: values.signal, note: values.note ?? null, by: values.by ?? null });
   if (values.json) io.stdout(JSON.stringify(r));
   else io.stdout(`Noted: ${id} is ${r.signal}.${r.forget_request && !r.forget_request.error ? " An ending request waits in review." : ""}${r.forget_request?.error ? ` (No ending request: ${r.forget_request.error})` : ""}`);

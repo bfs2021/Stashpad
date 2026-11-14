@@ -132,6 +132,23 @@ test("unknown command is a usage error", async () => {
   assert.match(err.join("\n"), /Unknown command/);
 });
 
+test("a wrong option value is a usage error, a store problem stays 1", async () => {
+  const dir = freshDir();
+  const cases = [
+    [["feedback", "db-choice", "--signal", "bad", "--dir", dir], /signal must be one of/],
+    [["handoff", "leave", "--text", "hi", "--expires-days", "abc", "--dir", dir], /expires-days must be a whole number/],
+    [["list", "--kind", "bogus", "--dir", dir], /unknown kind/],
+    [["search", "x", "--source-type", "bogus", "--dir", dir], /unknown source type/],
+  ];
+  for (const [args, message] of cases) {
+    const { io, err } = harness();
+    assert.equal(await run(args, io), 2, args.join(" "));
+    assert.match(err.join("\n"), message);
+  }
+  const missing = harness();
+  assert.equal(await run(["get", "nothing-here", "--dir", dir], missing.io), 1);
+});
+
 test("--help prints usage and exits 0", async () => {
   const { io, out } = harness();
   assert.equal(await run(["--help"], io), 0);
