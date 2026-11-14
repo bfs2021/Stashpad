@@ -19,13 +19,19 @@ export function tokenize(text) {
   const folded = text.normalize("NFD").replace(/(\p{Script=Latin})\p{M}+/gu, "$1").normalize("NFC");
   for (const chunk of folded.split(/[^\p{L}\p{N}+#]+/u)) {
     if (chunk === "") continue;
-    // Keep C++, C# and F# whole: the split below would drop the symbol and leave a
-    // one-letter word. A symbol that is not glued to a word ("a + b") still separates.
-    if (NAMED.test(chunk)) {
-      tokens.push(chunk.toLowerCase());
-      continue;
+    let raws;
+    if (chunk.includes("+") || chunk.includes("#")) {
+      // Keep C++, C# and F# whole: the split above drops the symbol and would leave a
+      // one-letter word. A symbol that is not glued to a word ("a + b") still separates.
+      if (NAMED.test(chunk)) {
+        tokens.push(chunk.toLowerCase());
+        continue;
+      }
+      raws = chunk.replace(SYMBOLS, " ").split(" ");
+    } else {
+      raws = [chunk];
     }
-    for (const raw of chunk.replace(SYMBOLS, " ").split(" ")) {
+    for (const raw of raws) {
       if (raw === "") continue;
       // Split an identifier at camel boundaries BEFORE lowercasing and keep the
       // whole identifier too, so "user profile" and getUserProfile both find it.
