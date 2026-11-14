@@ -214,6 +214,12 @@ function usageError(io, message) {
   return 2;
 }
 
+// Commands that act on exactly one memory. One check before the switch is less
+// code than one in every case, and it runs before anything is read or written (#69).
+const ONE_ID_COMMANDS = new Set([
+  "accept", "reject", "get", "history", "pin", "unpin", "confirm", "forget", "restore",
+]);
+
 async function cmdSave(io, dir, id, values) {
   const required = ["kind", "source-type", "text"];
   if (values["source-file"] === undefined) required.push("source-ref");
@@ -853,6 +859,10 @@ export async function run(argv, io = defaultIo()) {
   }
 
   const [command, id] = positionals;
+  if (ONE_ID_COMMANDS.has(command) && positionals.length > 2) {
+    const ids = positionals.slice(1);
+    return usageError(io, `${command} takes one id, but got ${ids.length}: ${ids.join(", ")}. Run it once for each id.`);
+  }
   const located = locateStore({ cwd: io.cwd, env: io.env, explicit: values.dir, global: values.global === true });
   const dir = located.dir;
 
@@ -915,7 +925,7 @@ export async function run(argv, io = defaultIo()) {
       case "synonym": {
         if (id !== "add") return usageError(io, "use: stashpad synonym add <word> <word...>");
         const done = addSynonyms(dir, positionals.slice(2));
-        io.stdout(`Added. ${done.groups} synonym group(s) in this store.`);
+        io.stdout(`${done.duplicate ? "Already there" : "Added"}. ${done.groups} synonym group(s) in this store.`);
         return 0;
       }
       case "duplicates": {
