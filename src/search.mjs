@@ -8,37 +8,61 @@ const B = 0.75;
 // search engines handle them without a dictionary.
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu;
 
+// A language name written with a symbol: letters directly followed by + or #.
+const NAMED = /^\p{L}+[+#]+$/u;
+const SYMBOLS = /[+#]+/gu;
+// A single capital letter standing alone names a language or tool (R, C, K).
+const STANDALONE = /^(?![AI]$)\p{Lu}$/u;
+
 export function tokenize(text) {
   const tokens = [];
   const folded = text.normalize("NFD").replace(/(\p{Script=Latin})\p{M}+/gu, "$1").normalize("NFC");
-  for (const raw of folded.split(/[^\p{L}\p{N}]+/u)) {
-    if (raw === "") continue;
-    // Split an identifier at camel boundaries BEFORE lowercasing and keep the
-    // whole identifier too, so "user profile" and getUserProfile both find it.
-    // Only pieces with a lower-to-upper boundary are split: applying the
-    // acronym rule to title-case words would turn "SQLite" into sq + lite.
-    const parts = /(?<=\p{Ll})(?=\p{Lu})/u.test(raw)
-      ? raw.replace(/(?<=\p{Ll})(?=\p{Lu})/gu, " ")
-           .replace(/(?<=\p{Lu})(?=\p{Lu}\p{Ll})/gu, " ").split(" ").filter(Boolean)
-      : [raw];
-    const whole = raw.toLowerCase();
-    if (parts.length > 1 && whole.length >= 2) tokens.push(whole);
-    for (const part of parts) {
-      const piece = part.toLowerCase();
-      if (piece === "") continue;
-      if (!CJK.test(piece)) {
-        if (piece.length >= 2) tokens.push(piece);
+  for (const chunk of folded.split(/[^\p{L}\p{N}+#]+/u)) {
+    if (chunk === "") continue;
+    let raws;
+    if (chunk.includes("+") || chunk.includes("#")) {
+      // Keep C++, C# and F# whole: the split above drops the symbol and would leave a
+      // one-letter word. A symbol that is not glued to a word ("a + b") still separates.
+      if (NAMED.test(chunk)) {
+        tokens.push(chunk.toLowerCase());
         continue;
       }
-      CJK.lastIndex = 0;
-      const rest = piece.replace(CJK, " ").split(" ").filter((w) => w.length >= 2);
-      tokens.push(...rest);
-      for (const run of piece.match(CJK)) {
-        const chars = [...run];
-        if (chars.length === 1) tokens.push(run);
-        for (let i = 0; i + 1 < chars.length; i += 1) tokens.push(chars[i] + chars[i + 1]);
+      raws = chunk.replace(SYMBOLS, " ").split(" ");
+    } else {
+      raws = [chunk];
+    }
+    for (const raw of raws) {
+      if (raw === "") continue;
+      // Split an identifier at camel boundaries BEFORE lowercasing and keep the
+      // whole identifier too, so "user profile" and getUserProfile both find it.
+      // Only pieces with a lower-to-upper boundary are split: applying the
+      // acronym rule to title-case words would turn "SQLite" into sq + lite.
+      const parts = /(?<=\p{Ll})(?=\p{Lu})/u.test(raw)
+        ? raw.replace(/(?<=\p{Ll})(?=\p{Lu})/gu, " ")
+             .replace(/(?<=\p{Lu})(?=\p{Lu}\p{Ll})/gu, " ").split(" ").filter(Boolean)
+        : [raw];
+      const whole = raw.toLowerCase();
+      if (parts.length > 1 && whole.length >= 2) tokens.push(whole);
+      for (const part of parts) {
+        const piece = part.toLowerCase();
+        if (piece === "") continue;
+        if (!CJK.test(piece)) {
+          if (piece.length >= 2) tokens.push(piece);
+          // A single capital letter standing alone is a name such as R; lowercase
+          // "a" and "i" are ordinary words, so STANDALONE leaves them out.
+          else if (raw.length === 1 && STANDALONE.test(raw)) tokens.push(piece);
+          continue;
+        }
+        CJK.lastIndex = 0;
+        const rest = piece.replace(CJK, " ").split(" ").filter((w) => w.length >= 2);
+        tokens.push(...rest);
+        for (const run of piece.match(CJK)) {
+          const chars = [...run];
+          if (chars.length === 1) tokens.push(run);
+          for (let i = 0; i + 1 < chars.length; i += 1) tokens.push(chars[i] + chars[i + 1]);
+        }
+        CJK.lastIndex = 0;
       }
-      CJK.lastIndex = 0;
     }
   }
   return tokens;

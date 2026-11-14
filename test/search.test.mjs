@@ -87,6 +87,47 @@ test("tokenize folds combining accents on Latin letters only", () => {
   assert.deepEqual(tokenize("cafe\u0301"), ["cafe"]);
 });
 
+test("tokenize keeps language names written with + or #", () => {
+  assert.deepEqual(
+    tokenize("The engine is written in C++ and C#, the stats scripts are in F#"),
+    ["the", "engine", "is", "written", "in", "c++", "and", "c#", "the", "stats", "scripts", "are", "in", "f#"],
+  );
+  assert.deepEqual(tokenize("C++"), ["c++"]);
+  assert.deepEqual(tokenize("c#"), ["c#"]);
+});
+
+test("tokenize keeps a standalone capital letter, but not A or I", () => {
+  assert.deepEqual(tokenize("The stats scripts are in R"), ["the", "stats", "scripts", "are", "in", "r"]);
+  assert.deepEqual(tokenize("A Dark-theme, in SQLite!"), ["dark", "theme", "in", "sqlite"]);
+});
+
+test("C++, C# and F# do not match each other", () => {
+  const docs = [
+    { id: "cpp", text: "The engine is written in C++" },
+    { id: "csharp", text: "The engine is written in C#" },
+    { id: "fsharp", text: "The scripts are in F#" },
+  ];
+  assert.deepEqual(bm25Rank(docs, "C++").map((result) => result.id), ["cpp"]);
+  assert.deepEqual(bm25Rank(docs, "c#").map((result) => result.id), ["csharp"]);
+  assert.deepEqual(bm25Rank(docs, "F#").map((result) => result.id), ["fsharp"]);
+});
+
+test("search finds a memory by a language name and by a one-letter name", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "stashpad-symbols-"));
+  saveMemory(dir, {
+    id: "stack",
+    kind: "fact",
+    text: "The engine is written in C++ and C#, the stats scripts are in R",
+    sourceType: "user",
+    sourceRef: "symbol search test",
+  }, "2026-10-01");
+  for (const query of ["C++", "c#", "R"]) {
+    const { io, out } = harness();
+    assert.equal(await run(["search", query, "--json", "--dir", dir], io), 0);
+    assert.deepEqual(JSON.parse(out[0]).map((result) => result.id), ["stack"]);
+  }
+});
+
 test("search matches Latin words with or without accents", async () => {
   const dir = mkdtempSync(join(tmpdir(), "stashpad-accents-"));
   saveMemory(dir, {

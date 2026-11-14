@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Language names keep their symbols in search:** `C++`, `C#` and `F#` are indexed as one token instead of being cut to a single letter, and each stays distinct from the others. A standalone capital letter such as `R` is searchable too, while `A` and `I` stay ordinary words. camelCase, accents, CJK pairs and plural folding work as before (#76).
+
 - **Feedback notes and handoff cancel reasons are checked for secrets:** both are free text that is written to the store, but they skipped the `findSecrets()` guard used everywhere else. A note or reason holding a key or token is now refused before anything is written (so `feedback.jsonl` stays untouched even with `--signal wrong`, and a refused cancel leaves the handoff open). Notes and reasons without secrets work as before. Thanks to @17302513901yh-lang! (#34, #67)
 
 - **`synonym add` no longer overwrites a `synonyms.json` it cannot read:** a hand-edited file with invalid JSON, a symlink, an oversized file or malformed groups now stops the command with a clear message and is left byte-for-byte untouched. Adding a group that is already there (same words, any order or case) is a no-op that says so, and a 501st group is refused instead of being written but never used. Thanks to @17302513901yh-lang! (#30, #68)
