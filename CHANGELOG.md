@@ -4,6 +4,8 @@
 
 - **Feedback notes and handoff cancel reasons are checked for secrets:** both are free text that is written to the store, but they skipped the `findSecrets()` guard used everywhere else. A note or reason holding a key or token is now refused before anything is written (so `feedback.jsonl` stays untouched even with `--signal wrong`, and a refused cancel leaves the handoff open). Notes and reasons without secrets work as before. Thanks to @17302513901yh-lang! (#34)
 
+- **`synonym add` no longer overwrites a `synonyms.json` it cannot read:** a hand-edited file with invalid JSON, a symlink, an oversized file or malformed groups now stops the command with a clear message and is left byte-for-byte untouched. Adding a group that is already there (same words, any order or case) is a no-op that says so, and a 501st group is refused instead of being written but never used. Thanks to @17302513901yh-lang! (#30)
+
 - **`stashpad shown --since` refuses a day that does not exist:** `2026-13-45` and `2026-02-30` now fail with a clear message and exit code 2, the same check `search` and `list` already use. Thanks to @17302513901yh-lang! (#60, #61)
 
 - **camelCase names are searchable by their plain words:** `getUserProfile` is now tokenised as get / user / profile (and kept whole), so "user profile" finds it. Acronyms such as `parseHTTPResponse` split too, while ordinary title-case words stay whole. Thanks to @17302513901yh-lang! (#44, #62)
